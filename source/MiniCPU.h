@@ -198,9 +198,13 @@ enum ConditionFlags
     ConFlag_Overflow = 3
 };
 
-// The reason the first bit is used to differentiate between the special load instuction and the rest of the instuction set
-// is to maximize the size of the constant value that can be moved.
-// This reduces the number of instructions needed to load values into the registers.
+/**
+ * @brief Basic instruction type that most instructions fall into. There are two exceptions, LOAD and JUMP.
+ * The reason the first bit is used to differentiate between the special load instuction and the rest of the instuction set
+ * is to maximize the size of the constant value that can be moved.
+ * This reduces the number of instructions needed to load values into the registers.
+ * For the jump, the first 7 bits are the same as Instruction but the rest of the struture is different.
+ */
 struct __attribute__ ((packed)) Instruction
 {
     uint32_t IsLoad:1;  // For this instruction type, always 0.
@@ -215,6 +219,12 @@ struct __attribute__ ((packed)) Instruction
     uint32_t ConstantData:12;
 };
 
+/**
+ * @brief Loads a constanting into a register.
+ * Only the first bit is common with all other instructions.
+ * 
+ * 
+ */
 struct __attribute__ ((packed)) LoadInstruction
 {
     uint32_t IsLoad:1;          // For this instruction type, always 1.
@@ -225,16 +235,27 @@ struct __attribute__ ((packed)) LoadInstruction
     u_int32_t ConstantData:24;  // The all important constant data.
 };
 
+/**
+ * @brief Jumps to an instruction location, PC is changed to the address of the instruction offset. E.G PC += (Offset * 4)
+ * The amount to jump is in number of instructions and not memory address location. PC is in memory address location.
+ * The first 5 bits have the same format as Instruction.
+ * The layout of the rest of the instruction is to maximise the space for the constant data.
+ * This is so we can jump the maximun amount with just one instruction.
+ * For > than 32k instructions will need to use a register as the offset.
+ * If a register other than the constant register is used then the constant data is added to the value in the register.
+ * If PCRelative is false then the jump is zero base, that is an absolute address.
+ * If PCRelative is true then the jump is +- the PC.
+ */
 struct __attribute__ ((packed)) JumpInstruction
 {
     uint32_t IsLoad:1;          // For this instruction type, always 0.
-    uint32_t OpCode:6;
+    uint32_t OpCode:6;          // Opcode will be "JUMP", enum OP_JUMP
 
     uint32_t Condition:4;
     uint32_t PCRelative:1;      // If true then the value in OffsetRegister is relative to the program counter. If false then is an absolute address.
     uint32_t OffsetRegister:4;  // Always in numbers of instructions, IE multiples of four bytes.
 
-    uint32_t ConstantData:17;   // Signed 17bit value, so +- 64k instructions to jump. 
+    uint32_t ConstantData:16;   // Signed 16bit value, so +- 32k instructions to jump. (instruction is 4 bytes, so can jump += 128k bytes using constant.)
 };
 
 struct AddressSpace
@@ -242,13 +263,13 @@ struct AddressSpace
     struct
     {
         u_int8_t Reset[0x4000];
-        u_int8_t Reset[0x4000];
-        u_int8_t Reset[0x4000];
-        u_int8_t Reset[0x4000];
+        u_int8_t Interupt1[0x4000];
+        u_int8_t Interupt2[0x4000];
+        u_int8_t Interupt3[0x4000];
     }InteruptCode;
 
-    u_int8_t BootCode[0x000000000000ffff];
-    u_int8_t BootCode[0x000000000000ffff];
+    u_int8_t BootCode1[0x000000000000ffff];
+    u_int8_t BootCode2[0x000000000000ffff];
 };
 
 class MiniCPU
