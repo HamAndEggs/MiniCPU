@@ -1,4 +1,5 @@
 #include <iostream>
+#include  <iomanip>
 
 #include "MachineCodeAssembler.h"
 #include "Util.h"
@@ -18,22 +19,57 @@ std::vector<Instruction> MachineCodeAssembler::Compile(const std::string& pAssem
 {
     std::vector<Instruction> machineCode;
 
+    int LineNumber = 0;
     const StringVec CodeLines = SplitString(pAssembler,"\n");
     for(const auto &line : CodeLines )
     {
         try
         {
+            LineNumber++;
             if( line.size() > 1 )
             {
                 const Instruction ins = MakeInstruction(line);
                 machineCode.push_back(ins);
 
-                std::cout << ins.OpCode << " " << ins.DataType << " " << ins.Source << " " << ins.Dest << " " << ins.ConstantData << std::endl;
+                const std::string cleaned = TrimWhiteSpace(SplitString(line,"//")[0]);
+                std::cout << "[" << cleaned << "] ";
+
+                if( ins.Standard.IsLoad )
+                {
+                    std::cout   << ins.Load.IsLoad << " "
+                                << ins.Load.OrWithDest << " "
+                                << ins.Load.Shift << " "
+                                << ins.Load.Dest << " "
+                                << ins.Load.ConstantData;
+                }
+                else if( ins.Standard.OpCode == OP_JUMP )
+                {
+                    std::cout   << ins.Jump.IsLoad << " "
+                                << ins.Jump.OpCode << " "
+                                << ins.Jump.Condition << " "
+                                << ins.Jump.PCRelative << " "
+                                << ins.Jump.OffsetRegister << " "
+                                << ins.Jump.ConstantData;
+                }
+                else
+                {
+                    std::cout   << ins.Standard.IsLoad << " "
+                                << ins.Standard.OpCode << " "
+                                << ins.Standard.Source << " "
+                                << ins.Standard.SourceIsAddress << " "
+                                << ins.Standard.Dest << " "
+                                << ins.Standard.DestIsAddress << " "
+                                << ins.Standard.DataType << " "
+                                << ins.Standard.ConstantData;
+                }
+
+                std::cout << " Bytes: 0x" << std::setfill('0') << std::setw(8) << std::hex << ins.Bytes << std::dec;
+                std::cout << std::endl;
             }
         }
         catch(const std::exception& e)
         {
-            std::cerr << e.what() << " : " << line << std::endl;
+            std::cerr << LineNumber << ": " << e.what() << " : " << line << std::endl;
         }        
     }
 
@@ -81,6 +117,7 @@ uint32_t MachineCodeAssembler::GetRegister(const std::string& a_Type)const
     DEF_REGISTER("r12",REG_12);
     DEF_REGISTER("r13",REG_13);
     DEF_REGISTER("r14",REG_14);
+    DEF_REGISTER("r15",REG_14);
 
     DEF_REGISTER("&r0",REG_0|REG_IS_ADDRESS);
     DEF_REGISTER("&r1",REG_1|REG_IS_ADDRESS);
@@ -97,16 +134,41 @@ uint32_t MachineCodeAssembler::GetRegister(const std::string& a_Type)const
     DEF_REGISTER("&r12",REG_12|REG_IS_ADDRESS);
     DEF_REGISTER("&r13",REG_13|REG_IS_ADDRESS);
     DEF_REGISTER("&r14",REG_14|REG_IS_ADDRESS);
-
-    DEF_REGISTER("-",REG_0);
-    DEF_REGISTER("C",REG_C);
+    DEF_REGISTER("&r15",REG_15|REG_IS_ADDRESS);
 
 #undef DEF_REGISTER
 
     return DataType_IGNORE;
 }
 
-const uint16_t MachineCodeAssembler::GetConstantData(const std::string& a_Data)const
+uint32_t MachineCodeAssembler::GetCondition(const std::string& a_Condition)const
+{
+    if( TrimWhiteSpace(a_Condition).size() == 0 )
+    {
+        throw std::runtime_error("Empty condition code not supported");
+    }
+
+
+#define DEF_CONDITION_CODE(__name__,__value__)   if( CompareNoCase(a_Condition,(__name__)) ){return (__value__);}
+
+    DEF_CONDITION_CODE("FALSE",ConCode_FALSE);
+    DEF_CONDITION_CODE("TRUE",ConCode_TRUE);
+    DEF_CONDITION_CODE("NEQ",ConCode_NEQ);
+    DEF_CONDITION_CODE("POS",ConCode_POS);
+    DEF_CONDITION_CODE("NZ",ConCode_NZ);
+    DEF_CONDITION_CODE("EQ",ConCode_EQ);
+    DEF_CONDITION_CODE("NE",ConCode_NE);
+    DEF_CONDITION_CODE("LT",ConCode_LT);
+    DEF_CONDITION_CODE("GT",ConCode_GT);
+    DEF_CONDITION_CODE("LE",ConCode_LE);
+    DEF_CONDITION_CODE("GE",ConCode_GE);
+
+#undef DEF_CONDITION_CODE
+
+    throw std::runtime_error("Unknown condition code " + a_Condition);
+}
+
+uint16_t MachineCodeAssembler::GetConstantDataUNSIGNED(const std::string& a_Data)const
 {
     uint16_t data;
     sscanf(a_Data.c_str(),"0x%hx",&data);
@@ -114,10 +176,30 @@ const uint16_t MachineCodeAssembler::GetConstantData(const std::string& a_Data)c
     return data;
 }
 
+int16_t MachineCodeAssembler::GetConstantDataSIGNED(const std::string& a_Data)const
+{
+    int16_t data;
+    sscanf(a_Data.c_str(),"0x%hx",&data);
+
+    return data;
+}
+
+uint32_t MachineCodeAssembler::GetValue(const std::string& a_Data,uint32_t a_AllowedMax)const
+{
+    const uint32_t value = std::stoul(a_Data,nullptr,16);
+    if( value > a_AllowedMax )
+    {
+        throw std::runtime_error("Reading value from string failed, allowed range is 0 to " + std::to_string(a_AllowedMax) + " value read was " + std::to_string(value) );
+    }
+
+    return value;
+}
+
+
 Instruction MachineCodeAssembler::MakeInstruction(const std::string& a_InstructionDescription)const
 {
     Instruction newInstruction;
-    *((u_int32_t*)(&newInstruction)) = 0;
+    newInstruction.Bytes = 0;
 
     const StringVec operation = SplitInstruction(a_InstructionDescription);
     const std::string instruction = operation[0];
@@ -128,29 +210,78 @@ Instruction MachineCodeAssembler::MakeInstruction(const std::string& a_Instructi
         throw std::runtime_error("Malformed instruction, all instructions have four params, even if not used. num params found " + std::to_string(params.size()) + " " + a_InstructionDescription);
     }
 
-    newInstruction.DataType = GetDataType(params[0]);
+    // We have three command formats.
+    // LOAD is denoted by the first bit, and so is not listed in the opcode enum.
+    // JUMP is in the opcode but has a different definition of the four params.
+    // The rest follow the same rules.
+    if( CompareNoCase(instruction,"LOAD") )
+    {
+        const uint32_t dest = GetRegister(params[2]);
+        if( IsRegisterAddress(dest) )
+        {
+            // Sorry, for jump register can't be a read address.
+            throw std::runtime_error("Malformed instruction, the LOAD instruction can not use registers as an indirect address " + a_InstructionDescription);
+        }
 
-    const uint32_t source = GetRegister(params[1]);
-    const uint32_t dest = GetRegister(params[2]);
+        newInstruction.Load.IsLoad = 1;
+        newInstruction.Load.OrWithDest = GetValue(params[0],1);
+        newInstruction.Load.Shift = GetValue(params[1],2);
+        newInstruction.Load.Dest = (dest&0x15);
 
-    if( !IsRegisterConstant(source) )
-    {// Get the index, may be register or the register as an address. Hence the mask.
-        newInstruction.Source = (source&0x7);
+        const uint32_t value = std::stoul(params[3],nullptr,16);
+
+        if( value > 0x00ffffff )
+        {
+            throw std::runtime_error("Malformed instruction, the constant data for LOAD is too large, only 24bit values allowed. Was given " + params[3]);
+        }
+
+        newInstruction.Load.ConstantData = value;
+
     }
+    else if( CompareNoCase(instruction,"JUMP") )
+    {
+        const uint32_t dest = GetRegister(params[2]);
+        if( IsRegisterAddress(dest) )
+        {
+            // Sorry, for jump register can't be a read address.
+            throw std::runtime_error("Malformed instruction, the JUMP instruction can not use registers as an indirect address " + a_InstructionDescription);
+        }
 
-    if( !IsRegisterConstant(source) )
-    {// Get the index, may be register or the register as an address. Hence the mask.
-        newInstruction.Dest = (dest&0x7);
+        newInstruction.Jump.IsLoad = 0;
+        newInstruction.Jump.OpCode = OP_JUMP;
+        newInstruction.Jump.Condition = GetCondition(params[0]);
+        newInstruction.Jump.PCRelative = GetValue(params[1],1);
+        newInstruction.Jump.OffsetRegister = (dest&0x15);
+        newInstruction.Jump.ConstantData = GetConstantDataSIGNED(params[3]);
+
     }
+    else
+    {
+        const uint32_t source = GetRegister(params[1]);
+        const uint32_t dest = GetRegister(params[2]);
 
-    newInstruction.ConstantData = GetConstantData(params[3]);
+        newInstruction.Standard.OpCode = GetOpCode(instruction);
+        newInstruction.Standard.Source = (source&0x15);
+        newInstruction.Standard.Dest = (dest&0x15);
 
-    newInstruction.OpCode = GetOpCode(instruction,source,dest);
+        if( IsRegisterAddress(source) )
+        {
+            newInstruction.Standard.SourceIsAddress = 1;
+        }
+
+        if( IsRegisterAddress(source) )
+        {
+            newInstruction.Standard.DestIsAddress = 1;
+        }
+
+        newInstruction.Standard.DataType = GetDataType(params[0]);
+        newInstruction.Standard.ConstantData = GetConstantDataUNSIGNED(params[3]);
+    }
 
     return newInstruction;
 }
 
-uint32_t MachineCodeAssembler::GetOpCode(const std::string& a_Instuction,uint32_t a_Source,uint32_t a_Dest)const
+uint32_t MachineCodeAssembler::GetOpCode(const std::string& a_Instuction)const
 {
 #define MAKE_OPCODE(__OP_NAME__,__OP_CODE__)  if( CompareNoCase(a_Instuction,(__OP_NAME__)) ){return __OP_CODE__;}
     OPERATION_CODES

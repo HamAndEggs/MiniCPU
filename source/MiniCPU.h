@@ -20,7 +20,7 @@ enum Registers
     REG_12 = 12,
     REG_13 = 13,
     REG_14 = 14,
-    REG_C = 15, // The special constant register, value is the constant part of the instruction.
+    REG_15 = 15, // The special constant register, value is the constant part of the instruction.
 
     NUMBER_REGISTERS,
     REG_IS_ADDRESS = 128 // top bit says it's an address.
@@ -70,8 +70,17 @@ union Register
     // Gets messy otherwise. Remember, seperation of concerns.
 
 
-
+// Note. JUMP comes first so that, when all zeros is read, it causes the JUMP instruction to do nothing. And so becomes an NOP command. The condition ConCode_FALSE is encoded as zero.
 #define OPERATION_CODES               \
+    /* Program control */               \
+    MAKE_OPCODE("JUMP",OP_JUMP)       /* JUMP 1,NE,R15,0xfffc  Jump back 3 instructions. Jump to address in register, constant is signed 16 bit. First parameter states if PC relative (true) or absolute (false). Jump is always N instructions. Either from address 0 or from PC. This means instructions are always 4 byte aligned. */\
+    MAKE_OPCODE("CMP",OP_CMP)       /* CMP U32,R1,R2,- */\
+    MAKE_OPCODE("RET",OP_RET)          /* RET -,-,-,-       Sets PC to value in stack. Also used for returning from interupts as before an interupt is called PC is pushed to stack. */\
+    MAKE_OPCODE("SWAP",OP_SWAP)      /* SWAP S32,R1,R2,-  Atomic value swap needed to allow semaphores and threading. */\
+    MAKE_OPCODE("PAUSE",OP_PAUSE)        /* PAUSE S32,R1,-,-  Pause micro seconds. */\
+    MAKE_OPCODE("SETINT",OP_SETINT)      /* SETINT -,R1,-,-    Enable specific interupts. */\
+    MAKE_OPCODE("CLRINT",OP_CLRINT)      /* CLRINT -,R1,-,-    Disable specific interupts. */\
+    /* data sinstrutions */ \
     MAKE_OPCODE("MOVE",OP_MOVE)       \
     /* Copies from the source register to the dest register. Number bytes copied is the data type * the unsigned constant data. */  \
     MAKE_OPCODE("MEMSET",OP_MEMSET)      /* MEMSET U32,R0,&R1,0x10 /* Copy 16 32 bit values, 128 bytes, to address. */             \
@@ -81,16 +90,8 @@ union Register
     MAKE_OPCODE("PUSH",OP_PUSH)      /* PUSH -,R0,-,-   Move 32Bit value from register into stack. */\
     MAKE_OPCODE("SPSET",OP_SPSET)       /* SPSET -,R0,-,-  Sets the stack pointer to the value of the passed register     */\
     MAKE_OPCODE("SPGET",OP_SPGET)       /* SPGET -,-,R0,-  Sets the register to the value of the stack pointer */\
-    MAKE_OPCODE("SAVE",OP_SAVE)        /* SAVE -,-,-,-   Saves everything (state) that needs to be saved to stack. */\
-    MAKE_OPCODE("LOAD",OP_LOAD)        /* LOAD -,-,-,-   Loads everything (state) that was saved on the stack. */\
-    /* Program control */\
-    MAKE_OPCODE("CMP",OP_CMP)       /* CMP U32,R1,R2,- */\
-    MAKE_OPCODE("JUMP",OP_JUMP)       /* JUMP 1,NE,R15,0xfffc  Jump back 3 instructions. Jump to address in register, constant is signed 16 bit. First parameter states if PC relative (true) or absolute (false). Jump is always N instructions. Either from address 0 or from PC. This means instructions are always 4 byte aligned. */\
-    MAKE_OPCODE("RET",OP_RET)          /* RET -,-,-,-       Sets PC to value in stack. Also used for returning from interupts as before an interupt is called PC is pushed to stack. */\
-    MAKE_OPCODE("SWAP",OP_SWAP)      /* SWAP S32,R1,R2,-  Atomic value swap needed to allow semaphores and threading. */\
-    MAKE_OPCODE("PAUSE",OP_PAUSE)        /* PAUSE S32,R1,-,-  Pause micro seconds. */\
-    MAKE_OPCODE("SETINT",OP_SETINT)      /* SETINT -,R1,-,-    Enable specific interupts. */\
-    MAKE_OPCODE("CLRINT",OP_CLRINT)      /* CLRINT -,R1,-,-    Disable specific interupts. */\
+    MAKE_OPCODE("SSET",OP_SSET)        /* SSET -,-,-,-   Saves everything (state) that needs to be saved to stack. */\
+    MAKE_OPCODE("SGET",OP_SGET)        /* SGET -,-,-,-   Fetches everything (state) that was saved on the stack. */\
     /* Bit wise operations */\
     MAKE_OPCODE("OR",OP_OR)       /* OR S32,R1,R2,-     */\
     MAKE_OPCODE("XOR",OP_XOR)      /* XOR S32,R1,R2,-   */\
@@ -165,8 +166,7 @@ enum OperationCodes
     OP_RESERVED_13,
     OP_RESERVED_14,
     OP_RESERVED_15,
-
-    OP_LAST = OP_RESERVED_11,
+    OP_LAST = OP_RESERVED_15,
 
     NUMBER_OPERATIONS
 };
@@ -198,6 +198,21 @@ enum ConditionFlags
     ConFlag_Overflow = 3
 };
 
+enum ConditionCodes
+{
+    ConCode_FALSE,  // Always executed, important that this comes first. Combined with the JUMP command being zero gives us the NOP for 32bit value of 0x00000000
+    ConCode_TRUE,   // Never executed
+    ConCode_NEQ,     // Negative
+    ConCode_POS,     // Positive or zero
+    ConCode_NZ,     // Not zero. Handy for loops. Set reg to count. subtract 1 just before jump. When zero jump will not jump....
+    ConCode_EQ,     // Equal
+    ConCode_NE,     // Not equal
+    ConCode_LT,     // less than
+    ConCode_GT,     // greater than
+    ConCode_LE,     // less than or equal
+    ConCode_GE,     // Greater than or equal
+};
+
 /**
  * @brief Basic instruction type that most instructions fall into. There are two exceptions, LOAD and JUMP.
  * The reason the first bit is used to differentiate between the special load instuction and the rest of the instuction set
@@ -205,7 +220,7 @@ enum ConditionFlags
  * This reduces the number of instructions needed to load values into the registers.
  * For the jump, the first 7 bits are the same as Instruction but the rest of the struture is different.
  */
-struct __attribute__ ((packed)) Instruction
+struct __attribute__ ((packed)) StandardInstruction
 {
     uint32_t IsLoad:1;  // For this instruction type, always 0.
     uint32_t OpCode:6;
@@ -255,7 +270,15 @@ struct __attribute__ ((packed)) JumpInstruction
     uint32_t PCRelative:1;      // If true then the value in OffsetRegister is relative to the program counter. If false then is an absolute address.
     uint32_t OffsetRegister:4;  // Always in numbers of instructions, IE multiples of four bytes.
 
-    uint32_t ConstantData:16;   // Signed 16bit value, so +- 32k instructions to jump. (instruction is 4 bytes, so can jump += 128k bytes using constant.)
+    int16_t ConstantData;   // Signed 16bit value, so +- 32k instructions to jump. (instruction is 4 bytes, so can jump += 128k bytes using constant.)
+};
+
+union Instruction
+{
+    u_int32_t Bytes;
+    StandardInstruction Standard;
+    LoadInstruction Load;
+    JumpInstruction Jump;
 };
 
 struct AddressSpace

@@ -22,17 +22,16 @@ public:
 
 private:
 
-
     uint32_t GetDataType(const std::string& a_Type)const;
     uint32_t GetRegister(const std::string& a_Type)const;
-    const uint16_t GetConstantData(const std::string& a_Data)const;
+    uint32_t GetCondition(const std::string& a_Condition)const;
+    uint16_t GetConstantDataUNSIGNED(const std::string& a_Data)const;
+    int16_t GetConstantDataSIGNED(const std::string& a_Data)const;
+    uint32_t GetValue(const std::string& a_Data,uint32_t a_AllowedMax)const;
     Instruction MakeInstruction(const std::string& a_InstructionDescription)const;
 
-    bool IsRegisterConstant(uint32_t a_Register)const{return a_Register == REG_C;}
     bool IsRegisterAddress(uint32_t a_Register)const{return (a_Register&REG_IS_ADDRESS)?true:false;}
-    bool IsRegister(uint32_t a_Register)const{return a_Register < NUMBER_REGISTERS;}
-
-    uint32_t GetOpCode(const std::string& a_Instuction,uint32_t a_Source,uint32_t a_Dest)const;
+    uint32_t GetOpCode(const std::string& a_Instuction)const;
 
 
 };

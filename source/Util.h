@@ -3,16 +3,19 @@
 
 #include <vector>
 #include <string>
+#include <sstream>
 #include <stdexcept>
 
 typedef std::vector<std::string> StringVec;
 
-inline StringVec SplitString(const std::string& pString, const char* pSeperator)
+inline const std::string ToString(const StringVec& pStringVector)
 {
-    StringVec res;
-    for (size_t p = 0, q = 0; p != pString.npos; p = q)
-        res.push_back(pString.substr(p + (p != 0), (q = pString.find(pSeperator, p + 1)) - p - (p != 0)));
-    return res;
+    std::stringstream str;
+    for( const auto& s : pStringVector )
+    {
+        str << "[" << s << "]";
+    }
+    return str.str();
 }
 
 inline std::string TrimWhiteSpace(const std::string &s)
@@ -26,6 +29,23 @@ inline std::string TrimWhiteSpace(const std::string &s)
         rit++;
 
     return std::string(it, rit.base());
+}
+
+inline StringVec SplitString(const std::string& pString, const char* pSeperator)
+{
+    StringVec res;
+    for (size_t p = 0, q = 0; p != pString.npos; p = q)
+    {
+        // Make sure it is not just all spaces.
+        const std::string s = pString.substr(p + (p != 0), (q = pString.find(pSeperator, p + 1)) - p - (p != 0));
+        const std::string cleaned = TrimWhiteSpace(s);
+        
+        if( s.size() > 0 )
+        {
+            res.push_back(s);
+        }
+    }
+    return res;
 }
 
 inline StringVec SplitInstruction(const std::string& a_InstructionDescription)
@@ -47,7 +67,7 @@ inline StringVec SplitInstruction(const std::string& a_InstructionDescription)
 
     if( res.size() != 2 )
     {
-        throw std::runtime_error("Bad formatted instruction found, res.size() == " + std::to_string(res.size()) + " [" + cleaned + "]");
+        throw std::runtime_error("Bad formatted instruction found, res.size() == " + std::to_string(res.size()) + " [" + cleaned + "] " + ToString(res));
     }
 
     // Now, if there are paramiters, we need to condition them. Remove start and end space.

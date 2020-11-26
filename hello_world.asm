@@ -13,4 +13,4 @@ MOVE S32,R15,R1,0x0000         // We'll accumulate in here.
 ADD  S32,$R2,R1,0x0000       // Add what is at address in R2 to R1
 ADD  S64,R15,R2,0x0004        // Increment R2 address by 4 bytes.
 SUB  S32,R15,R0,0x0001         // Decrement counter
-JUMP NZ,R15,0xfffd         // Jump back 3 instructions from current PC. 0xfffd == -3
+JUMP NZ,1,R15,0xfffd         // Jump back 3 instructions from current PC. 0xfffd == -3

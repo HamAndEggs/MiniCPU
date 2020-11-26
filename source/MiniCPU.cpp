@@ -23,9 +23,11 @@ int main(int argc, char *argv[])
 // Say hello to the world!
     std::cout << "MiniCPU emulator playground..." << std::endl;
 
-    std::cout << "sizeof Instruction = " << sizeof(Instruction) << std::endl;
+    std::cout << "sizeof Register = " << sizeof(Register) << std::endl;
+    std::cout << "sizeof StandardInstruction = " << sizeof(StandardInstruction) << std::endl;
     std::cout << "sizeof LoadInstruction = " << sizeof(LoadInstruction) << std::endl;
     std::cout << "sizeof JumpInstruction = " << sizeof(JumpInstruction) << std::endl;
+    std::cout << "sizeof Instruction = " << sizeof(Instruction) << std::endl;
 
     std::cout << "NUMBER_OPERATIONS = " << NUMBER_OPERATIONS << std::endl;
     std::cout << "OP_LAST = " << OP_LAST << std::endl;
