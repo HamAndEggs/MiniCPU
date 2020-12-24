@@ -33,20 +33,20 @@ union Register
     int32_t s32;
     int64_t s64;
 
-    u_int8_t  u8;
-    u_int16_t u16;
-    u_int32_t u32;
-    u_int64_t u64;
+    uint8_t  u8;
+    uint16_t u16;
+    uint32_t u32;
+    uint64_t u64;
 
     int8_t  *ps8;
     int16_t *ps16;
     int32_t *ps32;
     int64_t *ps64;
 
-    u_int8_t  *pu8;
-    u_int16_t *pu16;
-    u_int32_t *pu32;
-    u_int64_t *pu64;
+    uint8_t  *pu8;
+    uint16_t *pu16;
+    uint32_t *pu32;
+    uint64_t *pu64;
 };
 
     // The assember format is the same as the instruction format, 5 elements. Operation Type,Source,Destination,Constant.
@@ -247,7 +247,7 @@ struct __attribute__ ((packed)) LoadInstruction
     uint32_t Shift:2;           // The amount to shift, in 24bit increments, the constant before updating dest.
     uint32_t Dest:4;            // The destination register.
 
-    u_int32_t ConstantData:24;  // The all important constant data.
+    uint32_t ConstantData:24;  // The all important constant data.
 };
 
 /**
@@ -275,7 +275,7 @@ struct __attribute__ ((packed)) JumpInstruction
 
 union Instruction
 {
-    u_int32_t Bytes;
+    uint32_t Bytes;
     StandardInstruction Standard;
     LoadInstruction Load;
     JumpInstruction Jump;
@@ -285,14 +285,14 @@ struct AddressSpace
 {
     struct
     {
-        u_int8_t Reset[0x4000];
-        u_int8_t Interupt1[0x4000];
-        u_int8_t Interupt2[0x4000];
-        u_int8_t Interupt3[0x4000];
+        uint8_t Reset[0x4000];
+        uint8_t Interupt1[0x4000];
+        uint8_t Interupt2[0x4000];
+        uint8_t Interupt3[0x4000];
     }InteruptCode;
 
-    u_int8_t BootCode1[0x000000000000ffff];
-    u_int8_t BootCode2[0x000000000000ffff];
+    uint8_t BootCode1[0x000000000000ffff];
+    uint8_t BootCode2[0x000000000000ffff];
 };
 
 class MiniCPU
@@ -304,7 +304,7 @@ public:
     void Reset();
 
 private:
-    u_int8_t mRam[1024*1024];
+    uint8_t mRam[1024*1024];
     Register mRegisters[NUMBER_REGISTERS];
 
 };
